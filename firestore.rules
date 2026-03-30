@@ -1,0 +1,186 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: songs
+    // Document ID: songId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - iswc: string (required)
+    //   - ownerId: string (required, immutable) - The UID of the song owner
+    //   - upc: string (optional)
+    //   - bpm: string (optional)
+    //   - key: string (optional)
+    //   - tempo: string (optional)
+    //   - sceneDescription: string (optional)
+    //   - moods: string (optional)
+    //   - instruments: string (optional)
+    //   - lyrics: string (optional)
+    //   - isOneStop: bool (optional)
+    //   - discoLink: string (optional)
+    //   - syncNotes: string (optional)
+    //   - metadataComments: string (optional)
+    //
+    // Collection: songs/{songId}/recordings
+    // Document ID: recordingId
+    // Fields:
+    //   - id: string (required)
+    //   - songId: string (required)
+    //   - code: string (required)
+    //   - label: string (required)
+    //   - story: string (optional) - Sentimental narrative
+    //   - isLimitedEdition: bool (optional)
+    //   - isSigned: bool (optional)
+    //   - isFramed: bool (optional)
+    //   - hasHandwrittenLyrics: bool (optional)
+    //   - valueEstimate: number (optional)
+    //   - pro: bool (optional)
+    //   - mlc: bool (optional)
+    //   - soundExchange: bool (optional)
+    //
+    // Collection: songs/{songId}/documents
+    // Document ID: documentId
+    // Fields:
+    //   - id: string (required)
+    //   - songId: string (required)
+    //   - type: string (required, enum: copyright, splitSheet, workForHire, metadata)
+    //   - status: string (required, enum: Pending, Draft, Required, In Progress, Signed, Registered, Finalized, N/A)
+    //   - file: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "rabonjrjimmie@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidString(field, maxLen) {
+      return request.resource.data[field] is string && request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, maxLen) {
+      return !(field in request.resource.data) || (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalBool(field) {
+      return !(field in request.resource.data) || request.resource.data[field] is bool;
+    }
+
+    function isValidOptionalNumber(field) {
+      return !(field in request.resource.data) || request.resource.data[field] is number;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidSong(data) {
+      return hasRequiredFields(['id', 'name', 'iswc', 'ownerId']) &&
+        isValidString('id', 100) &&
+        isValidString('name', 200) &&
+        isValidString('iswc', 50) &&
+        isValidString('ownerId', 100) &&
+        isValidOptionalString('upc', 50) &&
+        isValidOptionalString('bpm', 10) &&
+        isValidOptionalString('key', 10) &&
+        isValidOptionalString('tempo', 20) &&
+        isValidOptionalString('sceneDescription', 1000) &&
+        isValidOptionalString('moods', 500) &&
+        isValidOptionalString('instruments', 500) &&
+        isValidOptionalString('lyrics', 10000) &&
+        isValidOptionalBool('isOneStop') &&
+        isValidOptionalString('discoLink', 500) &&
+        isValidOptionalString('syncNotes', 2000) &&
+        isValidOptionalString('metadataComments', 2000);
+    }
+
+    function isValidRecording(data) {
+      return hasRequiredFields(['id', 'songId', 'code', 'label']) &&
+        isValidString('id', 100) &&
+        isValidString('songId', 100) &&
+        isValidString('code', 50) &&
+        isValidString('label', 100) &&
+        isValidOptionalString('story', 5000) &&
+        isValidOptionalBool('isLimitedEdition') &&
+        isValidOptionalBool('isSigned') &&
+        isValidOptionalBool('isFramed') &&
+        isValidOptionalBool('hasHandwrittenLyrics') &&
+        isValidOptionalNumber('valueEstimate') &&
+        isValidOptionalBool('pro') &&
+        isValidOptionalBool('mlc') &&
+        isValidOptionalBool('soundExchange');
+    }
+
+    function isValidDocument(data) {
+      return hasRequiredFields(['id', 'songId', 'type', 'status']) &&
+        isValidString('id', 100) &&
+        isValidString('songId', 100) &&
+        data.type in ['copyright', 'splitSheet', 'workForHire', 'metadata'] &&
+        data.status in ['Pending', 'Draft', 'Required', 'In Progress', 'Signed', 'Registered', 'Finalized', 'N/A'] &&
+        isValidOptionalString('file', 500);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /songs/{songId} {
+      allow read: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSong(request.resource.data) && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidSong(request.resource.data) && 
+                      (resource.data.ownerId == request.auth.uid || isAdmin()) &&
+                      request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+
+      match /recordings/{recordingId} {
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isAuthenticated() && isValidRecording(request.resource.data) && 
+                        (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+        allow update: if isAuthenticated() && isValidRecording(request.resource.data) && 
+                        (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+        allow delete: if isAuthenticated() && (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+      }
+
+      match /documents/{documentId} {
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isAuthenticated() && isValidDocument(request.resource.data) && 
+                        (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+        allow update: if isAuthenticated() && isValidDocument(request.resource.data) && 
+                        (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+        allow delete: if isAuthenticated() && (get(/databases/$(database)/documents/songs/$(songId)).data.ownerId == request.auth.uid || isAdmin());
+      }
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) && 
+                              (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isAdmin());
+    }
+  }
+}

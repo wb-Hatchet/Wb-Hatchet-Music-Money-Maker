@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "Song": {
+      "title": "Song",
+      "description": "A musical work with an ISWC.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "iswc": { "type": "string" },
+        "ownerId": { "type": "string", "description": "The UID of the song owner." },
+        "upc": { "type": "string" },
+        "bpm": { "type": "string" },
+        "key": { "type": "string" },
+        "tempo": { "type": "string" },
+        "sceneDescription": { "type": "string" },
+        "moods": { "type": "string" },
+        "instruments": { "type": "string" },
+        "lyrics": { "type": "string" },
+        "isOneStop": { "type": "boolean" },
+        "discoLink": { "type": "string" },
+        "syncNotes": { "type": "string" },
+        "metadataComments": { "type": "string" }
+      },
+      "required": ["id", "name", "iswc", "ownerId"]
+    },
+    "Recording": {
+      "title": "Recording",
+      "description": "A specific version of a song with an ISRC.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "songId": { "type": "string" },
+        "code": { "type": "string" },
+        "label": { "type": "string" },
+        "story": { "type": "string", "description": "The 'clue' or narrative behind this version to drive sentimental desire." },
+        "isLimitedEdition": { "type": "boolean" },
+        "isSigned": { "type": "boolean" },
+        "isFramed": { "type": "boolean" },
+        "hasHandwrittenLyrics": { "type": "boolean" },
+        "valueEstimate": { "type": "number", "description": "The estimated street value based on leverage strategy." },
+        "pro": { "type": "boolean" },
+        "mlc": { "type": "boolean" },
+        "soundExchange": { "type": "boolean" }
+      },
+      "required": ["id", "songId", "code", "label"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Legal or metadata documents associated with a song stack.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "songId": { "type": "string" },
+        "type": { "type": "string", "enum": ["copyright", "splitSheet", "workForHire", "metadata"] },
+        "status": { "type": "string", "enum": ["Pending", "Draft", "Required", "In Progress", "Signed", "Registered", "Finalized", "N/A"] },
+        "file": { "type": "string" }
+      },
+      "required": ["id", "songId", "type", "status"]
+    }
+  },
+  "firestore": {
+    "/songs/{songId}": {
+      "schema": "Song",
+      "description": "Collection of musical works."
+    },
+    "/songs/{songId}/recordings/{recordingId}": {
+      "schema": "Recording",
+      "description": "Specific versions (ISRCs) of a song, including leverage metadata."
+    },
+    "/songs/{songId}/documents/{documentId}": {
+      "schema": "Document",
+      "description": "Legal and metadata documents for a song."
+    }
+  }
+}
